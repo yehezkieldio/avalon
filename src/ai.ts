@@ -7,9 +7,9 @@ import {
     MessagesPlaceholder,
     SystemMessagePromptTemplate
 } from "@langchain/core/prompts";
-import { RunnableSequence } from "@langchain/core/runnables";
+import { RunnablePassthrough, RunnableSequence } from "@langchain/core/runnables";
 import { ChatOpenAI } from "@langchain/openai";
-import { BufferMemory } from "langchain/memory";
+import { ConversationSummaryBufferMemory } from "langchain/memory";
 import type { Env } from "./types";
 import { getCurrentModel } from "./utils";
 
@@ -53,7 +53,7 @@ export async function createChatModel(env: Env): Promise<ChatOpenAI | null> {
             },
             temperature: 0.7,
             maxTokens: 1024,
-            streaming: false // Keep streaming false for simple invocation
+            streaming: false
         });
 
         return llm;
@@ -65,8 +65,12 @@ export async function createChatModel(env: Env): Promise<ChatOpenAI | null> {
 
 export async function runChat(llm: ChatOpenAI, userId: string, input: string): Promise<string> {
     try {
-        const memory = new BufferMemory({
+        const memory = new ConversationSummaryBufferMemory({
+            llm: llm,
+            maxTokenLimit: 500,
             returnMessages: true,
+            memoryKey: "history",
+            inputKey: "input",
             chatHistory: new CloudflareD1MessageHistory({
                 tableName: "stored_message",
                 sessionId: userId,
@@ -81,42 +85,29 @@ export async function runChat(llm: ChatOpenAI, userId: string, input: string): P
         ]);
 
         const chain = RunnableSequence.from([
-            {
-                input: (initialInput) => initialInput.input,
-                memory: () => memory.loadMemoryVariables({})
-            },
-            {
-                input: (previousOutput) => previousOutput.input,
-                history: (previousOutput) => previousOutput.memory.history
-            },
+            RunnablePassthrough.assign({
+                history: async () => {
+                    const memoryVariables = await memory.loadMemoryVariables({});
+                    return memoryVariables.history || [];
+                }
+            }),
             prompt,
             llm,
             new StringOutputParser()
         ]);
 
-        const chainInput = { input };
-        const res = await chain.invoke(chainInput);
-        await memory.saveContext(chainInput, {
-            output: res
-        });
+        const result = await chain.invoke({ input });
+        await memory.saveContext({ input }, { output: result });
 
-        return res;
-
-        // const chain = prompt.pipe(llm);
-        // const result = await chain.invoke({ input });
-        // if (typeof result.content === "string") {
-        //     return result.content;
-        // } else {
-        //     // Handle cases where content might be structured differently or is not a string
-        //     console.warn("Received non-string content from LLM:", result.content);
-        //     return JSON.stringify(result.content) || "Sorry, I received an unexpected response format.";
-        // }
+        return result;
     } catch (error) {
         console.error("Error running chat:", error);
-        // Consider providing more specific error messages if possible
         let errorMessage = "An error occurred while processing your request with the AI model.";
         if (error instanceof Error) {
             errorMessage += ` Details: ${error.message}`;
+            if ("response" in error && error.response) {
+                console.error("Error response data:", error);
+            }
         }
         return errorMessage;
     }
