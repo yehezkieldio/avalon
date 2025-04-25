@@ -35,10 +35,10 @@ export function ephemeralMessage(content: string) {
 export async function getCurrentModel(env: Env): Promise<string> {
     try {
         const model = await env.SETTINGS_KV.get("CURRENT_MODEL");
-        return model || "meta-llama/llama-3.2-3b-instruct:free";
+        return model || "meta-llama/llama-3.3-70b-instruct:free";
     } catch (e) {
         console.error("KV get error:", e);
-        return "meta-llama/llama-3.2-3b-instruct:free";
+        return "meta-llama/llama-3.3-70b-instruct:free";
     }
 }
 

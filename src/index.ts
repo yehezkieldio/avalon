@@ -2,9 +2,9 @@ import { isChatInputApplicationCommandInteraction } from "discord-api-types/util
 import { InteractionResponseFlags, InteractionResponseType, InteractionType, verifyKey } from "discord-interactions";
 import { AutoRouter } from "itty-router";
 import { createAgentExecutor, runAgent } from "./agent";
-import { CHAT_COMMAND, chatSchema } from "./commands";
+import { CHAT_COMMAND, chatSchema, SETMODEL_COMMAND, setModelSchema } from "./commands";
 import type { Env } from "./types";
-import { jsonResponse, sendFollowup } from "./utils";
+import { ephemeralMessage, getCurrentModel, jsonResponse, sendFollowup, setCurrentModel } from "./utils";
 
 const router = AutoRouter();
 
@@ -90,6 +90,44 @@ router.post("/", async (request: Request, env: Env, ctx: ExecutionContext) => {
                     );
 
                     return jsonResponse({ type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE });
+                }
+
+                case SETMODEL_COMMAND.name.toLocaleLowerCase(): {
+                    const userId = interaction.member?.user?.id || interaction.user?.id;
+
+                    if (userId !== env.OWNER_USER_ID) {
+                        console.warn(`Unauthorized setmodel attempt by user ${userId}`);
+                        return ephemeralMessage("You do not have permission to use this command.");
+                    }
+
+                    if (!interaction.data.options) {
+                        await sendFollowup(interaction.token, env.DISCORD_APPLICATION_ID, {
+                            content: "No options provided.",
+                            flags: InteractionResponseFlags.EPHEMERAL
+                        });
+                        return;
+                    }
+
+                    const options = interaction.data.options.reduce((acc: Record<string, unknown>, opt) => {
+                        if ("value" in opt) {
+                            acc[opt.name] = opt.value;
+                        }
+                        return acc;
+                    }, {});
+
+                    const validation = setModelSchema.safeParse(options);
+                    if (!validation.success) {
+                        return ephemeralMessage(
+                            `Invalid input: ${validation.error.errors.map((e) => e.message).join(", ")}`
+                        );
+                    }
+                    const { model_name } = validation.data;
+
+                    console.log(`Owner ${userId} setting model to: ${model_name}`);
+                    await setCurrentModel(env, model_name);
+                    const currentSetModel = await getCurrentModel(env); // Verify it was set
+
+                    return ephemeralMessage(`Model set to: \`${currentSetModel}\`.`);
                 }
             }
         }
