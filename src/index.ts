@@ -70,7 +70,7 @@ router.post("/", async (request: Request, env: Env, ctx: ExecutionContext) => {
                                 return;
                             }
 
-                            const result = await runChat(chatModel, userId!, query);
+                            const result = await runChat(chatModel, query);
 
                             const chunks = [];
                             for (let i = 0; i < result.length; i += 1990) {
