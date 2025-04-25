@@ -1,6 +1,6 @@
 {
     "scripts": {
-        "cf-typegen": "wrangler types"
+        "typecheck": "tsc --noEmit"
     },
     "dependencies": {
         "@langchain/cloudflare": "^0.1.0",
