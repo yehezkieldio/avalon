@@ -1,0 +1,7 @@
+name = "avalon"
+main = "src/index.ts"
+compatibility_date = "2023-11-21"
+
+[[kv_namespaces]]
+binding = "SETTINGS_KV"
+id = "fc2318ebaa6d4181add30f21e41d825c"
