@@ -3,6 +3,7 @@
         "cf-typegen": "wrangler types"
     },
     "dependencies": {
+        "@langchain/cloudflare": "^0.1.0",
         "@langchain/community": "^0.3.41",
         "@langchain/core": "^0.3.48",
         "@langchain/langgraph": "^0.2.67",

@@ -1,5 +1,15 @@
-import { ChatPromptTemplate, HumanMessagePromptTemplate, SystemMessagePromptTemplate } from "@langchain/core/prompts";
+import { env } from "cloudflare:workers";
+import { CloudflareD1MessageHistory } from "@langchain/cloudflare";
+import { StringOutputParser } from "@langchain/core/output_parsers";
+import {
+    ChatPromptTemplate,
+    HumanMessagePromptTemplate,
+    MessagesPlaceholder,
+    SystemMessagePromptTemplate
+} from "@langchain/core/prompts";
+import { RunnableSequence } from "@langchain/core/runnables";
 import { ChatOpenAI } from "@langchain/openai";
+import { BufferMemory } from "langchain/memory";
 import type { Env } from "./types";
 import { getCurrentModel } from "./utils";
 
@@ -20,7 +30,6 @@ Formatting (Discord-specific):
 
 Rules:
 - Do not mention that you are an AI unless directly asked.
-- You do not have memory of prior conversations, and cannot retain or recall them.
 - If the user prompt is unclear, ask for clarification. Do not guess.
 - Always respond in a way that fits the tone of the user's message while maintaining your persona.
 
@@ -54,26 +63,54 @@ export async function createChatModel(env: Env): Promise<ChatOpenAI | null> {
     }
 }
 
-export async function runChat(llm: ChatOpenAI, input: string): Promise<string> {
+export async function runChat(llm: ChatOpenAI, userId: string, input: string): Promise<string> {
     try {
+        const memory = new BufferMemory({
+            returnMessages: true,
+            chatHistory: new CloudflareD1MessageHistory({
+                tableName: "stored_message",
+                sessionId: userId,
+                database: env.DB
+            })
+        });
+
         const prompt = ChatPromptTemplate.fromMessages([
             SystemMessagePromptTemplate.fromTemplate(SYSTEM_PROMPT),
+            new MessagesPlaceholder("history"),
             HumanMessagePromptTemplate.fromTemplate("{input}")
         ]);
 
-        const chain = prompt.pipe(llm);
+        const chain = RunnableSequence.from([
+            {
+                input: (initialInput) => initialInput.input,
+                memory: () => memory.loadMemoryVariables({})
+            },
+            {
+                input: (previousOutput) => previousOutput.input,
+                history: (previousOutput) => previousOutput.memory.history
+            },
+            prompt,
+            llm,
+            new StringOutputParser()
+        ]);
 
-        const result = await chain.invoke({ input });
+        const chainInput = { input };
+        const res = await chain.invoke(chainInput);
+        await memory.saveContext(chainInput, {
+            output: res
+        });
 
-        // Assuming the result structure has a 'content' property for the text response
-        // Adjust based on the actual response structure of ChatOpenAI invoke
-        if (typeof result.content === "string") {
-            return result.content;
-        } else {
-            // Handle cases where content might be structured differently or is not a string
-            console.warn("Received non-string content from LLM:", result.content);
-            return JSON.stringify(result.content) || "Sorry, I received an unexpected response format.";
-        }
+        return res;
+
+        // const chain = prompt.pipe(llm);
+        // const result = await chain.invoke({ input });
+        // if (typeof result.content === "string") {
+        //     return result.content;
+        // } else {
+        //     // Handle cases where content might be structured differently or is not a string
+        //     console.warn("Received non-string content from LLM:", result.content);
+        //     return JSON.stringify(result.content) || "Sorry, I received an unexpected response format.";
+        // }
     } catch (error) {
         console.error("Error running chat:", error);
         // Consider providing more specific error messages if possible

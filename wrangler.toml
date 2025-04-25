@@ -6,5 +6,10 @@ compatibility_date = "2023-11-21"
 binding = "SETTINGS_KV"
 id = "fc2318ebaa6d4181add30f21e41d825c"
 
+[[d1_databases]]
+binding = "DB"
+database_name = "DB"
+database_id = "926aac52-a382-4fbb-b5b1-447e5aef3f06"
+
 [observability.logs]
 enabled = true
