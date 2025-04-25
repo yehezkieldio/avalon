@@ -11,7 +11,13 @@
     },
     "files": {
         "ignoreUnknown": true,
-        "includes": ["**", "!**/dist/**", "!node_modules", "!bun.lock"]
+        "includes": [
+            "**",
+            "!**/dist/**",
+            "!node_modules",
+            "!bun.lock",
+            "!**/worker-configuration.d.ts/**"
+        ]
     },
     "formatter": {
         "attributePosition": "multiline",

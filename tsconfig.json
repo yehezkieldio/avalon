@@ -17,8 +17,7 @@
         "noUncheckedIndexedAccess": true,
         "noUnusedLocals": false,
         "noUnusedParameters": false,
-        "noPropertyAccessFromIndexSignature": false,
-        "types": ["@cloudflare/workers-types"]
+        "noPropertyAccessFromIndexSignature": false
     },
     "exclude": ["node_modules", "dist"]
 }

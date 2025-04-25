@@ -1,9 +1,12 @@
 import { InteractionResponseFlags, InteractionResponseType } from "discord-interactions";
-import { type Env } from "./types";
+import type { Env } from "./types";
 
-/**
- * Sends a followup message to an interaction.
- */
+export function jsonResponse(data: unknown) {
+    return new Response(JSON.stringify(data), {
+        headers: { "Content-Type": "application/json" }
+    });
+}
+
 export async function sendFollowup(token: string, applicationId: string, messageData: unknown): Promise<Response> {
     const url = `https://discord.com/api/v10/webhooks/${applicationId}/${token}`;
     const response = await fetch(url, {
@@ -19,9 +22,16 @@ export async function sendFollowup(token: string, applicationId: string, message
     return response;
 }
 
-/**
- * Gets the current model from KV or default.
- */
+export function ephemeralMessage(content: string) {
+    return jsonResponse({
+        type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+        data: {
+            content,
+            flags: InteractionResponseFlags.EPHEMERAL
+        }
+    });
+}
+
 export async function getCurrentModel(env: Env): Promise<string> {
     try {
         const model = await env.SETTINGS_KV.get("CURRENT_MODEL");
@@ -32,35 +42,10 @@ export async function getCurrentModel(env: Env): Promise<string> {
     }
 }
 
-/**
- * Sets the current model in KV.
- */
 export async function setCurrentModel(env: Env, model: string): Promise<void> {
     try {
         await env.SETTINGS_KV.put("CURRENT_MODEL", model);
     } catch (e) {
         console.error("KV put error:", e);
     }
-}
-
-/**
- * Helper to create a simple text response for Discord.
- */
-export function jsonResponse(data: unknown) {
-    return new Response(JSON.stringify(data), {
-        headers: { "Content-Type": "application/json" }
-    });
-}
-
-/**
- * Helper for ephemeral messages
- */
-export function ephemeralMessage(content: string) {
-    return jsonResponse({
-        type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-        data: {
-            content,
-            flags: InteractionResponseFlags.EPHEMERAL
-        }
-    });
 }

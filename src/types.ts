@@ -3,6 +3,7 @@ import { type KVNamespace } from "@cloudflare/workers-types";
 export interface Env {
     DISCORD_BOT_TOKEN: string;
     OPENROUTER_API_KEY: string;
+    LANGSMITH_API_KEY: string;
     TAVILY_API_KEY: string;
 
     DISCORD_PUBLIC_KEY: string;

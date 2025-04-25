@@ -1,4 +1,5 @@
-import type { ChatPromptTemplate } from "@langchain/core/prompts";
+import { type ChatPromptTemplate, SystemMessagePromptTemplate } from "@langchain/core/prompts";
+import type { ToolInterface } from "@langchain/core/tools";
 import { ChatOpenAI } from "@langchain/openai";
 import { TavilySearch } from "@langchain/tavily";
 import { AgentExecutor, createReactAgent } from "langchain/agents";
@@ -26,7 +27,7 @@ export async function createAgentExecutor(env: Env): Promise<AgentExecutor | nul
             streaming: false
         });
 
-        const tools = [
+        const tools: ToolInterface[] = [
             new TavilySearch({
                 maxResults: 5,
                 topic: "general",
@@ -34,12 +35,14 @@ export async function createAgentExecutor(env: Env): Promise<AgentExecutor | nul
             })
         ];
 
-        const prompt = await pull<ChatPromptTemplate>("hwchase17/react-chat");
+        const basePrompt = await pull<ChatPromptTemplate>("hwchase17/react-chat", {
+            apiKey: env.LANGSMITH_API_KEY
+        });
 
         const agent = await createReactAgent({
             llm,
             tools,
-            prompt
+            prompt: basePrompt
         });
 
         const agentExecutor = new AgentExecutor({
@@ -58,7 +61,7 @@ export async function createAgentExecutor(env: Env): Promise<AgentExecutor | nul
 
 export async function runAgent(agentExecutor: AgentExecutor, input: string): Promise<string> {
     try {
-        const result = await agentExecutor.invoke({ input });
+        const result = await agentExecutor.invoke({ input, chat_history: [] });
         return result.output || "Sorry, I couldn't process that.";
     } catch (error) {
         console.error("Error running agent:", error);
