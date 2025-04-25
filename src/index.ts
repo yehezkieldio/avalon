@@ -70,7 +70,7 @@ router.post("/", async (request: Request, env: Env, ctx: ExecutionContext) => {
                                 return;
                             }
 
-                            const result = await runChat(chatModel, query);
+                            const result = await runChat(chatModel, query, env);
 
                             const chunks = [];
                             for (let i = 0; i < result.length; i += 1990) {
@@ -92,7 +92,7 @@ router.post("/", async (request: Request, env: Env, ctx: ExecutionContext) => {
                             sendFollowup(interaction.token, env.DISCORD_APPLICATION_ID, {
                                 content:
                                     "An unexpected error occurred while processing your request." +
-                                    (err instanceof Error ? `\n\`${err.message}\`` : ""), // Include error message safely
+                                    (err instanceof Error ? `\n\`${err}\`` : ""), // Include error message safely
                                 flags: InteractionResponseFlags.EPHEMERAL
                             }).catch((followupErr) => console.error("Failed to send error followup:", followupErr));
                         })
@@ -160,13 +160,11 @@ router.post("/", async (request: Request, env: Env, ctx: ExecutionContext) => {
 });
 router.all("*", () => new Response("Not Found.", { status: 404 }));
 
-// ... existing verifyDiscordRequest ...
 async function verifyDiscordRequest(request: Request, env: Env) {
     const signature: string | null = request.headers.get("x-signature-ed25519");
     const timestamp: string | null = request.headers.get("x-signature-timestamp");
-    const body: string = await request.text(); // Read body once
+    const body: string = await request.text();
 
-    // Clone the request to read the body again for JSON parsing if verification passes
     const isValidRequest =
         signature && timestamp && (await verifyKey(body, signature, timestamp, env.DISCORD_PUBLIC_KEY));
 

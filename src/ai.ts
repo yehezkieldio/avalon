@@ -1,39 +1,42 @@
-import { StringOutputParser } from "@langchain/core/output_parsers";
+/** biome-ignore-all lint/suspicious/noExplicitAny: <explanation> */
+/** biome-ignore-all lint/complexity/noExcessiveCognitiveComplexity: <explanation> */
 import { ChatPromptTemplate, HumanMessagePromptTemplate, SystemMessagePromptTemplate } from "@langchain/core/prompts";
-import { RunnableSequence } from "@langchain/core/runnables";
+import { ChatGroq } from "@langchain/groq"; // Import ChatGroq
 import { ChatOpenAI } from "@langchain/openai";
 import type { Env } from "./types";
 import { getCurrentModel } from "./utils";
 
-const SYSTEM_PROMPT = `You are Avalon—a reliable, efficient assistant operating within Discord.
+const SYSTEM_PROMPT = `You are Avalon, a precise and efficient assistant operating within Discord.
 
-**Purpose**
-- Deliver accurate, relevant, and concise responses to user input.
-- Provide clarity, utility, and precision in every interaction.
+Purpose:
+- Provide accurate, concise, and relevant responses to user queries.
+- Ensure clarity and utility in every interaction.
 
-**Tone & Behavior**
+Tone & Behavior:
 - Maintain a clear, direct, and respectful tone.
-- Match the user's tone: professional for technical queries, conversational for casual input.
-- Keep responses concise. Expand only when requested.
-- Ask clarifying questions when input is vague, as you do not retain memory of prior messages. Help users refine their request if needed.
+- Match the user's tone: professional for technical queries, casual for informal interactions.
+- Keep responses concise and to the point. Expand only when requested.
+- Ask clarifying questions when needed. Help refine user requests.
 
-**Formatting (Discord-specific)**
-- Use Discord formatting for clarity:
-  - *Italics* for subtle nuance.
-  - **Bold** for key emphasis.
-  - \`Inline code\` for short technical references.
-  - \`\`\`Triple backticks\`\`\` for multi-line code or structured output.
-- Avoid large text blocks. Use spacing and structure for readability.
+Formatting (Discord-specific):
+- Use Discord formatting for emphasis:
+    - *Italics* for subtle nuance.
+    - **Bold** for key emphasis.
+- Avoid large blocks of text. Use spacing and structure for readability.
 
-**Rules of Engagement**
+Rules of Engagement:
 - Do not explain your reasoning unless explicitly asked.
 - Do not simulate personality or refer to your nature, design, or context.
-- Stay focused, on-topic, and functionally useful at all times.
+- Stay on-topic and functional at all times.
 
-**System Info**
+System Info:
 - You are maintained by Liz.
-- Your default model is **Llama 3.3 70B Instruct**, but your maintainer may switch you to a different model at any time.
-- You do not retain memory across messages. Treat each input as standalone.`;
+- Your default model is **Llama 3.3 70B Instruct**, but this may change.
+- You do not retain memory across messages. Each input is treated as standalone.
+
+When asked about yourself:
+- You are Avalon, maintained by Liz. Your purpose is to assist with precision and efficiency.
+`;
 
 export async function createChatModel(env: Env): Promise<ChatOpenAI | null> {
     try {
@@ -50,8 +53,6 @@ export async function createChatModel(env: Env): Promise<ChatOpenAI | null> {
                     "X-Title": "Avalon"
                 }
             },
-            temperature: 0.7,
-            maxTokens: 1024,
             streaming: false
         });
 
@@ -62,27 +63,122 @@ export async function createChatModel(env: Env): Promise<ChatOpenAI | null> {
     }
 }
 
-export async function runChat(llm: ChatOpenAI, input: string): Promise<string> {
+// Updated function signature to accept env
+export async function runChat(llm: ChatOpenAI, input: string, env: Env): Promise<string> {
+    console.log("Running chat with input:", input);
+
+    if (!llm) {
+        console.error("Error running chat: The primary ChatOpenAI model instance provided was null.");
+        return "An error occurred: The primary AI model could not be initialized.";
+    }
+
+    const prompt = ChatPromptTemplate.fromMessages([
+        SystemMessagePromptTemplate.fromTemplate(SYSTEM_PROMPT),
+        HumanMessagePromptTemplate.fromTemplate("{input}")
+    ]);
+
     try {
-        const prompt = ChatPromptTemplate.fromMessages([
-            SystemMessagePromptTemplate.fromTemplate(SYSTEM_PROMPT),
-            HumanMessagePromptTemplate.fromTemplate("{input}")
-        ]);
-
-        const chain = RunnableSequence.from([prompt, llm, new StringOutputParser()]);
-
+        // First attempt with the primary LLM
+        const chain = prompt.pipe(llm);
         const result = await chain.invoke({ input });
 
-        return result;
-    } catch (error) {
-        console.error("Error running chat:", error);
-        let errorMessage = "An error occurred while processing your request with the AI model.";
-        if (error instanceof Error) {
-            errorMessage += ` Details: ${error.message}`;
-            if ("response" in error && error.response) {
-                console.error("Error response data:", error);
-            }
+        if (typeof result.content === "string") {
+            return result.content;
+        } else {
+            console.warn("Received non-string content from primary LLM:", result.content);
+            return JSON.stringify(result.content) || "Sorry, I received an unexpected response format.";
         }
-        return errorMessage;
+    } catch (initialError) {
+        console.error("--- Error running chat with primary model ---");
+        console.error("Initial Error:", initialError);
+        console.log("Attempting fallback with Groq...");
+
+        if (!env.GROQ_API_KEY) {
+            console.error("Groq API Key not found in environment. Cannot fallback.");
+            return `An error occurred with the primary AI model, and fallback is not possible due to missing configuration. Details: ${initialError instanceof Error ? initialError.message : JSON.stringify(initialError)}`;
+        }
+
+        try {
+            const llm2 = new ChatGroq({
+                apiKey: env.GROQ_API_KEY,
+                model: "llama-3.3-70b-versatile"
+            });
+
+            const chain2 = prompt.pipe(llm2);
+            console.log("Invoking fallback chain with Groq model...");
+            const fallbackResult = await chain2.invoke({ input });
+
+            if (typeof fallbackResult.content === "string") {
+                console.log("Fallback successful.");
+                return fallbackResult.content;
+            } else {
+                console.warn("Received non-string content from fallback LLM:", fallbackResult.content);
+                return (
+                    JSON.stringify(fallbackResult.content) ||
+                    "Sorry, I received an unexpected response format from the fallback model."
+                );
+            }
+        } catch (fallbackError) {
+            console.error("--- Error running chat with fallback model (Groq) ---");
+            console.error("Fallback Error:", fallbackError);
+
+            // Log details of the fallback error similar to the original error handling
+            let errorMessage = "An error occurred with the primary AI model, and the fallback attempt also failed.";
+
+            // Add details from the initial error
+            if (initialError instanceof Error) {
+                errorMessage += ` Initial Error: ${initialError.message}.`;
+            } else {
+                try {
+                    errorMessage += ` Initial Error: ${JSON.stringify(initialError)}.`;
+                } catch {
+                    errorMessage += " Initial Error: (Non-serializable object).";
+                }
+            }
+
+            // Add details from the fallback error
+            if (fallbackError instanceof Error) {
+                errorMessage += ` Fallback Error: ${fallbackError.message}.`;
+            } else {
+                try {
+                    errorMessage += ` Fallback Error: ${JSON.stringify(fallbackError)}.`;
+                } catch {
+                    errorMessage += " Fallback Error: (Non-serializable object).";
+                }
+            }
+
+            // Optionally log detailed fallback error object structure
+            if (typeof fallbackError === "object" && fallbackError !== null) {
+                console.error("Inspecting fallback error object properties:");
+                for (const key in fallbackError) {
+                    if (Object.hasOwn(fallbackError, key)) {
+                        try {
+                            console.error(`  ${key}:`, JSON.stringify((fallbackError as any)[key], null, 2));
+                        } catch (_e) {
+                            console.error(`  ${key}: (Could not stringify property)`);
+                        }
+                    }
+                }
+                if ("response" in fallbackError && (fallbackError as any).response) {
+                    console.error(
+                        "Detailed fallback error.response:",
+                        JSON.stringify((fallbackError as any).response, null, 2)
+                    );
+                    if (
+                        typeof (fallbackError as any).response === "object" &&
+                        (fallbackError as any).response !== null &&
+                        "data" in (fallbackError as any).response
+                    ) {
+                        console.error(
+                            "Detailed fallback error.response.data:",
+                            JSON.stringify((fallbackError as any).response.data, null, 2)
+                        );
+                    }
+                }
+            }
+
+            console.error("--- End Fallback Error ---");
+            return errorMessage;
+        }
     }
 }
