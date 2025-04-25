@@ -16,7 +16,7 @@
             "!**/dist/**",
             "!node_modules",
             "!bun.lock",
-            "!**/worker-configuration.d.ts/**"
+            "!worker-configuration.d.ts"
         ]
     },
     "formatter": {
