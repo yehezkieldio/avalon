@@ -66,4 +66,4 @@ Avalon is a Discord bot powered by AI that provides conversational capabilities 
 
 ## License
 
-This project does not currently have a license specified.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
